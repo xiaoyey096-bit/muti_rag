@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>格物智答</title>
+<script src="/front/config.js"></script>
+<style>
+  :root{
+    --bar:#f7f8fa; --line:#e3e6ea; --ink:#1f2329; --sub:#8a94a6; --accent:#2f6fed;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{display:flex;flex-direction:column;background:#fff;color:var(--ink);
+    font-family:"Microsoft YaHei",system-ui,-apple-system,sans-serif}
+  .bar{flex:0 0 auto;display:flex;align-items:center;gap:18px;height:48px;padding:0 18px;
+    background:var(--bar);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;font-size:15px;letter-spacing:.5px}
+  nav{display:flex;gap:6px}
+  nav button{appearance:none;border:1px solid transparent;background:transparent;cursor:pointer;
+    color:var(--sub);font-size:14px;padding:6px 14px;border-radius:8px;font-family:inherit}
+  nav button:hover{color:var(--ink);background:#eceff3}
+  nav button.on{color:var(--accent);background:#fff;border-color:var(--line);font-weight:600}
+  .panes{flex:1 1 auto;position:relative}
+  .panes iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
+  .panes iframe[hidden]{display:none}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span class="brand">格物智答</span>
+    <nav>
+      <button type="button" id="tabChat">智能问答</button>
+      <button type="button" id="tabImport">知识库导入</button>
+    </nav>
+  </div>
+
+  <div class="panes">
+    <iframe id="frameChat" title="智能问答" hidden></iframe>
+    <iframe id="frameImport" title="知识库导入" hidden></iframe>
+  </div>
+
+<script>
+  const tabs = { chat: document.getElementById('tabChat'), import: document.getElementById('tabImport') };
+  const frames = { chat: document.getElementById('frameChat'), import: document.getElementById('frameImport') };
+  let active = '';
+
+  // 两个子页各用一个常驻 iframe：切 Tab 不重载，问答的流式输出与会话状态不会被中断
+  function setTab(which, query){
+    which = which === 'import' ? 'import' : 'chat';
+    const frame = frames[which];
+    const url = GW.local(which, query || '');
+    if (!frame.dataset.loaded) {
+      frame.src = url;
+      frame.dataset.loaded = '1';
+    } else if (query && frame.dataset.query !== query) {
+      // 带 kb_id 进来时按指定知识库重载
+      frame.src = url;
+    }
+    if (query) frame.dataset.query = query;
+
+    active = which;
+    Object.keys(tabs).forEach(k => tabs[k].classList.toggle('on', k === which));
+    Object.keys(frames).forEach(k => frames[k].hidden = (k !== which));
+
+    try{ localStorage.setItem('rag_shell_tab', which); }catch(e){}
+    const hash = '#' + which + (query ? '?' + query : '');
+    if (location.hash !== hash) history.replaceState(null, '', hash);
+  }
+  GW.setTab = setTab;
+
+  function boot(){
+    // 支持三种进入方式：#import / #chat?kb_id=xxx / ?kb_id=xxx（默认落到问答）
+    const hash = location.hash.replace(/^#/, '');
+    const parts = hash.split('?');
+    const params = new URLSearchParams(location.search);
+    const kbId = new URLSearchParams(parts[1] || '').get('kb_id') || params.get('kb_id') || '';
+
+    let which = parts[0] === 'import' ? 'import' : (parts[0] === 'chat' ? 'chat' : '');
+    if (!which) { try{ which = localStorage.getItem('rag_shell_tab') || ''; }catch(e){} }
+    if (kbId) which = 'chat';
+
+    setTab(which, kbId ? 'kb_id=' + encodeURIComponent(kbId) : '');
+  }
+
+  tabs.chat.addEventListener('click', () => setTab('chat', ''));
+  tabs.import.addEventListener('click', () => setTab('import', ''));
+  boot();
+</script>
+</body>
+</html>

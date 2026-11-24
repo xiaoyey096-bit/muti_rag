@@ -1,0 +1,67 @@
+"""多问题拆分：一次输入含多个独立问题时拆成列表，下游每问独立检索/独立 top3。
+
+快路径：明显单问直接返回，省一次 LLM 调用；疑似多问才交给 LLM 判定，
+LLM 失败时退化为按问号/分号/换行的规则切分。
+"""
+
+import json
+import logging
+import re
+from typing import List
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from muti_rag.prompts.query_prompt import QUERY_SPLIT_PROMPT
+from muti_rag.utils.client.ai_clients import AIClients
+
+logger = logging.getLogger(__name__)
+
+MAX_SUB_QUERIES = 4
+
+_MULTI_HINT_RE = re.compile(r"[？?；;]\s*\S|\n\s*\S|另外|还有|以及|同时|再问|顺便|第二个|第一个")
+
+
+def _rule_split(text: str) -> List[str]:
+    pieces = [p.strip() for p in re.split(r"[？?；;]\s*|\n+", text) if p.strip()]
+    if len(pieces) <= 1:
+        return [text.strip()] if text.strip() else []
+    return pieces[:MAX_SUB_QUERIES]
+
+
+def _llm_split(text: str) -> List[str]:
+    client = AIClients.get_llm_client(response_format=True)
+    resp = client.invoke([
+        SystemMessage(content="你是问题拆分专家，只输出 JSON。"),
+        HumanMessage(content=QUERY_SPLIT_PROMPT.format(query=text)),
+    ])
+    content = re.sub(r"^```(?:json)?\s*", "", (resp.content or "").strip())
+    content = re.sub(r"\s*```$", "", content)
+    obj = json.loads(content)
+    raw = obj.get("questions")
+    if not isinstance(raw, list):
+        return []
+    out, seen = [], set()
+    for q in raw:
+        if not isinstance(q, str):
+            continue
+        q = q.strip()
+        if q and q not in seen:
+            seen.add(q)
+            out.append(q)
+    return out[:MAX_SUB_QUERIES]
+
+
+def split_queries(query: str) -> List[str]:
+    text = (query or "").strip()
+    if not text:
+        return []
+    if not _MULTI_HINT_RE.search(text):
+        return [text]
+    try:
+        subs = _llm_split(text)
+        if subs:
+            return subs
+    except Exception as e:
+        logger.warning(f"LLM 拆分问题失败，退化为规则切分: {e}")
+    subs = _rule_split(text)
+    return subs or [text]

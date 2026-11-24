@@ -1,0 +1,19 @@
+from muti_rag.processor.query_processor.base import BaseNode
+from muti_rag.processor.query_processor.state import QueryGraphState
+from muti_rag.utils.query_split_util import split_queries
+
+
+class QuerySplitNode(BaseNode):
+    """把一次输入里的多个独立问题拆开，下游检索/重排/回答按子问题各自独立进行。"""
+
+    name = "query_split_node"
+
+    def process(self, state: QueryGraphState) -> QueryGraphState:
+        query = state.get('rewritten_query') or state.get('original_query') or ""
+        subs = split_queries(query) or [query]
+        state['sub_queries'] = subs
+        if len(subs) > 1:
+            self.logger.info(f"检测到 {len(subs)} 个独立问题，将分别检索与回答: {subs}")
+        else:
+            self.logger.info("单一问题，走单路检索")
+        return state

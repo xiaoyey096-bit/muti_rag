@@ -1,0 +1,24 @@
+# ===== 环境变量与密钥（绝不提交）=====
+.env
+
+# ===== 运行时临时数据（PDF、MinerU 解析产物、chunks 等大文件）=====
+temp_data/
+processor/import_processor/temp_dir/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# ===== 运行时日志 =====
+*.log
